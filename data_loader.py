@@ -7,9 +7,10 @@ UPDATED: Accurate extraction based on actual Excel file structures.
 import pandas as pd
 import os
 from datetime import datetime
+from pathlib import Path
 
-# Base folder containing the Excel files
-DATA_FOLDER = r"c:\Dad's Dashboard for rejection"
+# Base folder containing the Excel files - uses the same directory as this script
+DATA_FOLDER = Path(__file__).parent
 
 
 def load_trend_data() -> pd.DataFrame:

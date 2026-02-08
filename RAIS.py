@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from data_loader import load_trend_data, load_visual_defects, load_shop_floor_defects, load_integrity_data
+from data_loader import load_trend_data, load_visual_defects, load_shop_floor_defects, load_integrity_data, load_assembly_rejection
 
 # ---------------------------------------------------------
 # 1. PAGE CONFIGURATION
@@ -23,7 +23,7 @@ st.sidebar.header("📁 Upload Data Files")
 st.sidebar.markdown("Upload your Excel files to analyze:")
 
 uploaded_production = st.sidebar.file_uploader(
-    "1️⃣ Production Data (YEARLY PRODUCTION COMMULATIVE)",
+    "1️⃣ Production Data (COMMULATIVE or YEARLY PRODUCTION)",
     type=['xlsx', 'xls'],
     key="production"
 )
@@ -46,13 +46,19 @@ uploaded_integrity = st.sidebar.file_uploader(
     key="integrity"
 )
 
+uploaded_assembly = st.sidebar.file_uploader(
+    "5️⃣ Assembly Rejection Report",
+    type=['xlsx', 'xls'],
+    key="assembly"
+)
+
 st.sidebar.divider()
 
 # ---------------------------------------------------------
 # 3. SIDEBAR CONTROLS
 # ---------------------------------------------------------
 st.sidebar.header("Dashboard Controls")
-view_mode = st.sidebar.radio("Select View:", ["Executive Summary", "Defect Deep Dive", "Process Integrity"])
+view_mode = st.sidebar.radio("Select View:", ["Executive Summary", "Assembly Rejection", "Defect Deep Dive", "Process Integrity"])
 
 # ---------------------------------------------------------
 # 4. DATA LOADING (From Uploaded Files)
@@ -63,12 +69,14 @@ df_trend = load_trend_data(uploaded_production)
 df_visual = load_visual_defects(uploaded_visual)
 df_shop = load_shop_floor_defects(uploaded_shopfloor)
 df_integrity = load_integrity_data(uploaded_integrity)
+df_assembly = load_assembly_rejection(uploaded_assembly)
 
 # Check if data is loaded
 has_production_data = len(df_trend) > 0 and df_trend['Production_Qty'].sum() > 0
 has_visual_data = len(df_visual) > 0 and df_visual['Quantity'].sum() > 0
 has_shop_data = len(df_shop) > 0 and df_shop['Quantity'].sum() > 0
 has_integrity_data = len(df_integrity) > 0 and df_integrity['Quantity'].sum() > 0
+has_assembly_data = len(df_assembly) > 0 and df_assembly['Total_Rej'].sum() > 0
 
 # ---------------------------------------------------------
 # 5. MAIN DASHBOARD VIEWS
@@ -126,6 +134,63 @@ if view_mode == "Executive Summary":
         st.plotly_chart(fig_trend, use_container_width=True)
         
         st.info("💡 **Insight:** Chart shows correlation between production volume and quality metrics from your uploaded data.")
+
+elif view_mode == "Assembly Rejection":
+    st.subheader("📋 Assembly Section Rejection Analysis")
+    
+    if not has_assembly_data:
+        st.warning("⚠️ Please upload the **Assembly Rejection Report** file in the sidebar to view this section.")
+    else:
+        # KPI Metrics
+        total_visual = df_assembly['Visual_Rej'].sum()
+        total_balloon = df_assembly['Balloon_Rej'].sum()
+        total_valve = df_assembly['Valve_Rej'].sum()
+        total_overall = df_assembly['Total_Rej'].sum()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Visual Rejections", f"{total_visual:,.0f}")
+        col2.metric("Balloon Rejections", f"{total_balloon:,.0f}")
+        col3.metric("Valve Rejections", f"{total_valve:,.0f}")
+        col4.metric("Total Rejections", f"{total_overall:,.0f}")
+        
+        st.divider()
+        
+        # Stacked bar chart showing rejection breakdown by month
+        st.markdown("#### Monthly Rejection Breakdown by Type")
+        
+        fig_assembly = go.Figure()
+        fig_assembly.add_trace(go.Bar(
+            x=df_assembly['Month'],
+            y=df_assembly['Visual_Rej'],
+            name='Visual Rejections',
+            marker_color='#3498DB'
+        ))
+        fig_assembly.add_trace(go.Bar(
+            x=df_assembly['Month'],
+            y=df_assembly['Balloon_Rej'],
+            name='Balloon Rejections',
+            marker_color='#E74C3C'
+        ))
+        fig_assembly.add_trace(go.Bar(
+            x=df_assembly['Month'],
+            y=df_assembly['Valve_Rej'],
+            name='Valve Rejections',
+            marker_color='#2ECC71'
+        ))
+        
+        fig_assembly.update_layout(
+            barmode='stack',
+            title="Monthly Assembly Section Rejections",
+            xaxis_title="Month",
+            yaxis_title="Rejection Count",
+            legend=dict(x=0.1, y=1.1, orientation="h"),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig_assembly, use_container_width=True)
+        
+        # Raw data table
+        st.markdown("#### Monthly Summary Data")
+        st.dataframe(df_assembly)
 
 elif view_mode == "Defect Deep Dive":
     st.subheader("🔍 Root Cause Analysis: Visual & Shop Floor")

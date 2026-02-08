@@ -274,3 +274,127 @@ def load_integrity_data(file_buffer) -> pd.DataFrame:
     result = result.reset_index(drop=True)
     
     return result
+
+
+def load_assembly_rejection(file_buffer) -> pd.DataFrame:
+    """
+    Loads Assembly Rejection Report data from uploaded file.
+    Source: ASSEMBLY REJECTION REPORT.xlsx
+    Contains daily rejection data for Visual, Balloon, and Valve testing.
+    """
+    if file_buffer is None:
+        return pd.DataFrame({'Month': [], 'Visual_Rej': [], 'Balloon_Rej': [], 
+                            'Valve_Rej': [], 'Total_Rej': []})
+    
+    xl = pd.ExcelFile(file_buffer)
+    
+    monthly_data = []
+    month_names = {
+        'APRIL': 'Apr-25', 'MAY': 'May-25', 'JUNE': 'Jun-25', 
+        'JULY': 'Jul-25', 'AUGUST': 'Aug-25', 'SEPTEMBER': 'Sep-25',
+        'OCTOBER': 'Oct-25', 'NOVEMBER': 'Nov-25', 'DECEMBER': 'Dec-25',
+        'JANUARY': 'Jan-26'
+    }
+    
+    for sheet in xl.sheet_names:
+        # Find month name
+        month_key = None
+        for m in month_names.keys():
+            if m in sheet.upper():
+                month_key = m
+                break
+        
+        if month_key is None:
+            continue
+        
+        try:
+            df = pd.read_excel(xl, sheet_name=sheet, header=None)
+            
+            # Find header row (contains DATE, VISUAL\nQTY, etc.)
+            header_row = None
+            for i, row in df.iterrows():
+                row_str = ' '.join([str(x) for x in row.values if pd.notna(x)]).upper()
+                if 'DATE' in row_str and 'VISUAL' in row_str:
+                    header_row = i
+                    break
+            
+            if header_row is None:
+                continue
+            
+            headers = df.iloc[header_row].values
+            data_df = df.iloc[header_row+1:]
+            
+            # Find column indices
+            visual_rej_idx = None
+            balloon_rej_idx = None
+            valve_rej_idx = None
+            total_rej_idx = None
+            
+            for idx, h in enumerate(headers):
+                if pd.isna(h):
+                    continue
+                h_str = str(h).upper().replace('\n', ' ')
+                
+                # Visual rejection column (first REJ QTY)
+                if visual_rej_idx is None and 'REJ' in h_str and 'QTY' in h_str:
+                    visual_rej_idx = idx
+                # Look for balloon and valve rej columns by position relative to balloon/valve checked qty
+                if 'BALLOON' in h_str and 'CHKD' in h_str:
+                    balloon_rej_idx = idx + 2  # REJ QTY is 2 columns after CHKD QTY
+                if 'VALVE' in h_str and 'CHKD' in h_str:
+                    valve_rej_idx = idx + 2
+                if 'TOTAL REJ' in h_str:
+                    total_rej_idx = idx
+            
+            # Sum up monthly data
+            visual_rej = 0
+            balloon_rej = 0
+            valve_rej = 0
+            total_rej = 0
+            
+            for _, row in data_df.iterrows():
+                # Skip summary rows (where DATE is NaN or contains 'SUNDAY')
+                date_val = row.iloc[0]
+                if pd.isna(date_val) or 'SUNDAY' in str(date_val).upper():
+                    continue
+                
+                if visual_rej_idx is not None:
+                    val = pd.to_numeric(row.iloc[visual_rej_idx], errors='coerce')
+                    if not pd.isna(val):
+                        visual_rej += val
+                
+                if balloon_rej_idx is not None and balloon_rej_idx < len(row):
+                    val = pd.to_numeric(row.iloc[balloon_rej_idx], errors='coerce')
+                    if not pd.isna(val):
+                        balloon_rej += val
+                
+                if valve_rej_idx is not None and valve_rej_idx < len(row):
+                    val = pd.to_numeric(row.iloc[valve_rej_idx], errors='coerce')
+                    if not pd.isna(val):
+                        valve_rej += val
+                
+                if total_rej_idx is not None:
+                    val = pd.to_numeric(row.iloc[total_rej_idx], errors='coerce')
+                    if not pd.isna(val):
+                        total_rej += val
+            
+            monthly_data.append({
+                'Month': month_names[month_key],
+                'Visual_Rej': visual_rej,
+                'Balloon_Rej': balloon_rej,
+                'Valve_Rej': valve_rej,
+                'Total_Rej': total_rej
+            })
+            
+        except Exception as e:
+            continue
+    
+    if not monthly_data:
+        monthly_data = [{'Month': 'No data', 'Visual_Rej': 0, 'Balloon_Rej': 0, 
+                        'Valve_Rej': 0, 'Total_Rej': 0}]
+    
+    result = pd.DataFrame(monthly_data)
+    result['Month'] = result['Month'].astype(str)
+    result = result.reset_index(drop=True)
+    
+    return result

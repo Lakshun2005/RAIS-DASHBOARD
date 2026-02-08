@@ -23,31 +23,37 @@ st.sidebar.header("📁 Upload Data Files")
 st.sidebar.markdown("Upload your Excel files to analyze:")
 
 uploaded_production = st.sidebar.file_uploader(
-    "1️⃣ Production Data (COMMULATIVE or YEARLY PRODUCTION)",
+    "1️⃣ YEARLY PRODUCTION COMMULATIVE",
     type=['xlsx', 'xls'],
     key="production"
 )
 
+uploaded_commulative = st.sidebar.file_uploader(
+    "2️⃣ COMMULATIVE 2025-26",
+    type=['xlsx', 'xls'],
+    key="commulative"
+)
+
 uploaded_visual = st.sidebar.file_uploader(
-    "2️⃣ Visual Inspection Report",
+    "3️⃣ Visual Inspection Report",
     type=['xlsx', 'xls'],
     key="visual"
 )
 
 uploaded_shopfloor = st.sidebar.file_uploader(
-    "3️⃣ Shop Floor Rejection Report",
+    "4️⃣ Shop Floor Rejection Report",
     type=['xlsx', 'xls'],
     key="shopfloor"
 )
 
 uploaded_integrity = st.sidebar.file_uploader(
-    "4️⃣ Balloon & Valve Integrity Report",
+    "5️⃣ Balloon & Valve Integrity Report",
     type=['xlsx', 'xls'],
     key="integrity"
 )
 
 uploaded_assembly = st.sidebar.file_uploader(
-    "5️⃣ Assembly Rejection Report",
+    "6️⃣ Assembly Rejection Report",
     type=['xlsx', 'xls'],
     key="assembly"
 )
@@ -58,7 +64,7 @@ st.sidebar.divider()
 # 3. SIDEBAR CONTROLS
 # ---------------------------------------------------------
 st.sidebar.header("Dashboard Controls")
-view_mode = st.sidebar.radio("Select View:", ["Executive Summary", "Assembly Rejection", "Defect Deep Dive", "Process Integrity"])
+view_mode = st.sidebar.radio("Select View:", ["Executive Summary", "Commulative Summary", "Assembly Rejection", "Defect Deep Dive", "Process Integrity"])
 
 # ---------------------------------------------------------
 # 4. DATA LOADING (From Uploaded Files)
@@ -66,6 +72,7 @@ view_mode = st.sidebar.radio("Select View:", ["Executive Summary", "Assembly Rej
 
 # Load data from uploaded files
 df_trend = load_trend_data(uploaded_production)
+df_commulative = load_trend_data(uploaded_commulative)  # Same structure as production
 df_visual = load_visual_defects(uploaded_visual)
 df_shop = load_shop_floor_defects(uploaded_shopfloor)
 df_integrity = load_integrity_data(uploaded_integrity)
@@ -73,6 +80,7 @@ df_assembly = load_assembly_rejection(uploaded_assembly)
 
 # Check if data is loaded
 has_production_data = len(df_trend) > 0 and df_trend['Production_Qty'].sum() > 0
+has_commulative_data = len(df_commulative) > 0 and df_commulative['Production_Qty'].sum() > 0
 has_visual_data = len(df_visual) > 0 and df_visual['Quantity'].sum() > 0
 has_shop_data = len(df_shop) > 0 and df_shop['Quantity'].sum() > 0
 has_integrity_data = len(df_integrity) > 0 and df_integrity['Quantity'].sum() > 0
@@ -134,6 +142,61 @@ if view_mode == "Executive Summary":
         st.plotly_chart(fig_trend, use_container_width=True)
         
         st.info("💡 **Insight:** Chart shows correlation between production volume and quality metrics from your uploaded data.")
+
+elif view_mode == "Commulative Summary":
+    st.subheader("📊 Commulative 2025-26 Analysis")
+    
+    if not has_commulative_data:
+        st.warning("⚠️ Please upload the **COMMULATIVE 2025-26** file in the sidebar to view this section.")
+    else:
+        # KPI Metrics
+        total_prod = df_commulative['Production_Qty'].sum()
+        avg_rej = df_commulative['Rejection_Rate'].mean()
+        max_rej_idx = df_commulative['Rejection_Rate'].idxmax()
+        peak_month = df_commulative.loc[max_rej_idx]['Month'] if max_rej_idx is not None else "N/A"
+        min_rej_idx = df_commulative['Rejection_Rate'].idxmin()
+        best_month = df_commulative.loc[min_rej_idx]['Month'] if min_rej_idx is not None else "N/A"
+        
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Production", f"{total_prod:,.0f} Units")
+        col2.metric("Avg Rejection Rate", f"{avg_rej:.2f}%")
+        col3.metric("Peak Rejection Month", peak_month)
+        col4.metric("Best Month", best_month)
+        
+        st.divider()
+        
+        # Trend Chart
+        st.markdown("#### Monthly Production vs. Rejection Rate")
+        
+        fig_comm = go.Figure()
+        fig_comm.add_trace(go.Bar(
+            x=df_commulative['Month'],
+            y=df_commulative['Production_Qty'],
+            name='Production Quantity',
+            marker_color='#9B59B6',
+            opacity=0.6
+        ))
+        fig_comm.add_trace(go.Scatter(
+            x=df_commulative['Month'],
+            y=df_commulative['Rejection_Rate'],
+            name='Rejection Rate (%)',
+            yaxis='y2',
+            line=dict(color='#E67E22', width=4, shape='spline'),
+            mode='lines+markers'
+        ))
+        
+        fig_comm.update_layout(
+            title="Commulative Production & Rejection Trend",
+            yaxis=dict(title='Production Units'),
+            yaxis2=dict(title='Rejection %', overlaying='y', side='right', range=[0, max(20, df_commulative['Rejection_Rate'].max() + 5)]),
+            legend=dict(x=0.1, y=1.1, orientation="h"),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig_comm, use_container_width=True)
+        
+        # Raw data
+        st.markdown("#### Monthly Data Table")
+        st.dataframe(df_commulative)
 
 elif view_mode == "Assembly Rejection":
     st.subheader("📋 Assembly Section Rejection Analysis")
